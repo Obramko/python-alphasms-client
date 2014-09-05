@@ -24,6 +24,7 @@ class Client(object):
             self.api_key = api_key
         else:
             raise ValueError("AlphaSMS API client needs either API key or login/password pair")
+        self.__message_queue = MessageQueue(self)
 
     def __create_request(self, action, action_elements=None):
         """
@@ -82,7 +83,7 @@ class Client(object):
             raise AlphaSmsException("Could not find balance XML node")
         return float(amount_node.text)
 
-    def __bulk_send_sms(self, messages):
+    def bulk_send_sms(self, messages):
         """
         Internal function used to
         :param messages:    dictionary of messages to send, made of:
@@ -150,7 +151,7 @@ class Client(object):
         :param wap_url: WAP Push URL
         :return: Message ID
         """
-        reply = self.__bulk_send_sms([{
+        reply = self.bulk_send_sms([{
             'recipient': recipient,
             'sender': sender,
             'text': text,
@@ -165,6 +166,18 @@ class Client(object):
             raise AlphaSmsServerError(our_reply['error'])
         return our_reply
 
+    def message_queue(self):
+        """
+        Returns message queue for bulk sending. Use it like this:
+
+        with client.message_queue() as q:
+            q.add_message(...)
+
+        :return: Message queue object
+        :rtype: MessageQueue
+        """
+        return self.__message_queue
+
 
 class AlphaSmsException(Exception):
     pass
@@ -172,3 +185,41 @@ class AlphaSmsException(Exception):
 
 class AlphaSmsServerError(Exception):
     pass
+
+
+class MessageQueue(object):
+    queue = []
+
+    def __init__(self, client):
+        """
+        :param client: Client
+        :type client: Client
+        """
+        self.client = client
+
+    def __enter__(self):
+        self.flush()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.flush()
+        return self
+
+    def flush(self):
+        if len(self.queue) > 0:
+            self.client.bulk_send_sms(self.queue)
+            print('Sending messages:')
+            print(self.queue)
+            self.queue.clear()
+
+    def add_message(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
+        self.queue.append({
+            'recipient': recipient,
+            'sender': sender,
+            'text': text,
+            'type': message_type,
+            'id': message_id,
+            'wap_url': wap_url
+        })
+        if len(self.queue) >= 50:
+            self.flush()
