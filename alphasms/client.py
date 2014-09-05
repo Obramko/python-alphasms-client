@@ -3,6 +3,7 @@ __author__ = 'abram'
 import requests
 import xml.etree.ElementTree as ETree
 import io
+from collections import namedtuple
 
 AUTH_METHOD_API = 0
 AUTH_METHOD_LOGIN_PASSWORD = 1
@@ -11,6 +12,8 @@ MESSAGE_TYPE_NORMAL = 0
 MESSAGE_TYPE_FLASH = 1
 MESSAGE_TYPE_WAP_PUSH = 2
 MESSAGE_TYPE_VOICE = 3
+
+OutgoingMessage = namedtuple('OutgoingMessage', 'recipient sender text message_type message_id wap_url')
 
 
 class Client(object):
@@ -86,16 +89,8 @@ class Client(object):
     def bulk_send_sms(self, messages):
         """
         Internal function used to
-        :param messages:    dictionary of messages to send, made of:
-                            {
-                                'recipient',
-                                'sender',
-                                'text',
-                                'type',
-                                'id',
-                                'wap_url'
-                            }
-                            See send_sms for details about this attributes
+        :param messages: list of messages to send
+        :type messages: list[OutgoingMessage]
         :return: Dict
                 {
                     'id': message id (supplied by user),
@@ -108,19 +103,17 @@ class Client(object):
         message_nodes = []
         for message in messages:
             our_new_message_node = ETree.Element('msg', {
-                'recipient': message['recipient'],
-                'sender': message['sender'],
-                'type': str(message['type'])
+                'recipient': message.recipient,
+                'sender': message.sender,
+                'type': str(message.message_type)
             })
-            if int(message['type']) == MESSAGE_TYPE_WAP_PUSH:
-                wap_url = message.get('wap_url', None)
-                if wap_url is None:
+            if int(message.message_type) == MESSAGE_TYPE_WAP_PUSH:
+                if message.wap_url is None:
                     raise ValueError('Valid WAP Push URL is required')
-                our_new_message_node.set('url', wap_url)
-            message_id = message.get('id', None)
-            if message_id is not None:
-                our_new_message_node.set('id', message_id)
-            our_new_message_node.text = message['text']
+                our_new_message_node.set('url', message.wap_url)
+            if message.message_id is not None:
+                our_new_message_node.set('id', message.message_id)
+            our_new_message_node.text = message.text
             message_nodes.append(our_new_message_node)
         xml_tree = self.__create_request('message', message_nodes)
         reply = self.__run_request(xml_tree)
@@ -148,14 +141,14 @@ class Client(object):
         :param wap_url: WAP Push URL
         :return: Message ID
         """
-        reply = self.bulk_send_sms([{
-                                        'recipient': recipient,
-                                        'sender': sender,
-                                        'text': text,
-                                        'type': message_type,
-                                        'id': message_id,
-                                        'wap_url': wap_url
-                                    }])
+        reply = self.bulk_send_sms([OutgoingMessage(
+            recipient=recipient,
+            sender=sender,
+            text=text,
+            message_type=message_type,
+            message_id=message_id,
+            wap_url=wap_url
+        )])
         our_reply = reply.pop()
         if our_reply is None:
             raise AlphaSmsException('No server reply')
@@ -186,6 +179,7 @@ class AlphaSmsServerError(Exception):
 
 class MessageQueue(object):
     queue = []
+    """:type: list[OutgoingMessage]"""
 
     def __init__(self, client):
         """
@@ -208,13 +202,13 @@ class MessageQueue(object):
             self.queue.clear()
 
     def add_message(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
-        self.queue.append({
-            'recipient': recipient,
-            'sender': sender,
-            'text': text,
-            'type': message_type,
-            'id': message_id,
-            'wap_url': wap_url
-        })
+        self.queue.append(OutgoingMessage(
+            recipient=recipient,
+            sender=sender,
+            text=text,
+            message_type=message_type,
+            message_id=message_id,
+            wap_url=wap_url
+        ))
         if len(self.queue) >= 50:
             self.flush()
