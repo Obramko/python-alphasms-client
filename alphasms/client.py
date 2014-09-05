@@ -82,14 +82,64 @@ class Client(object):
             raise AlphaSmsException("Could not find balance XML node")
         return float(amount_node.text)
 
-    def send_sms(self, recipient, sender, text, id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
+    def __bulk_send_sms(self, messages):
+        """
+        Internal function used to
+        :param messages:    dictionary of messages to send, made of:
+                            'recipient',
+                            'sender',
+                            'text',
+                            'type',
+                            'id',
+                            'wap_url'
+                            See send_sms for details about this attributes
+        :return: Dict
+                {
+                    'id': message id (supplied by user),
+                    'sms_count': count of messages sent (for multipart messages),
+                    'sms_id': message id (supplied by service)
+                    'error': error code (1 for success)
+                }
+        :raise ValueError: For WAP Push-related errors
+        """
+        message_nodes = []
+        for message in messages:
+            our_new_message_node = ETree.Element('msg', {
+                'recipient': message['recipient'],
+                'sender': message['sender'],
+                'type': str(message['type'])
+            })
+            if int(message['type']) == MESSAGE_TYPE_WAP_PUSH:
+                wap_url = message.get('wap_url', None)
+                if wap_url is None:
+                    raise ValueError('Valid WAP Push URL is required')
+                our_new_message_node.set('url', wap_url)
+            message_id = message.get('id', None)
+            if message_id is not None:
+                our_new_message_node.set('id', message_id)
+            our_new_message_node.text = message['text']
+            message_nodes.append(our_new_message_node)
+        xml_tree = self.__create_request('message', message_nodes)
+        reply = self.__run_request(xml_tree)
+        reply_msg_nodes = reply.findall('message/msg')
+        replies = []
+        for reply_msg_node in reply_msg_nodes:
+            replies.append({
+                'id': reply_msg_node.get('id'),
+                'sms_count': reply_msg_node.get('sms_count'),
+                'sms_id': reply_msg_node.get('sms_id'),
+                'error': reply_msg_node.text
+            })
+        return replies
+
+    def send_sms(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
         """
         Sends SMS
 
         :param recipient: Recipient phone number. May be in Ukrainian or international format
         :param sender: Sender name, e.g. your phone number or registered alphanumeric name
         :param text: Message text
-        :param id: User-defined message ID. MUST be unique if defined
+        :param message_id: User-defined message ID. MUST be unique if defined
         :param message_type: Message type.
                              May be one of MESSAGE_TYPE_NORMAL, MESSAGE_TYPE_FLASH, MESSAGE_MESSAGE_TYPE_WAP_PUSH or
                              MESSAGE_TYPE_VOICE.
@@ -98,33 +148,20 @@ class Client(object):
         :param wap_url: WAP Push URL
         :return: Message ID
         """
-        message_node = ETree.Element('msg', {
+        reply = self.__bulk_send_sms([{
             'recipient': recipient,
             'sender': sender,
-            'type': str(message_type)
-        })
-        if message_type == MESSAGE_TYPE_WAP_PUSH:
-            if wap_url is None:
-                raise ValueError('Valid WAP Push URL is required')
-            message_node.set('url', wap_url)
-        if id is not None:
-            message_node.set('id', id)
-        message_node.text = text
-        xml_tree = self.__create_request('message', [message_node])
-
-        reply = self.__run_request(xml_tree)
-        reply_msg_node = reply.find('message/msg')
-        """:type : ETree.Element"""
-        if reply_msg_node is None:
-            raise AlphaSmsException('Could not find msg node')
-        if int(reply_msg_node.text) == 1:
-            return {
-                'id': reply_msg_node.get('id'),
-                'sms_count': reply_msg_node.get('sms_count'),
-                'sms_id': reply_msg_node.get('sms_id')
-            }
-        else:
-            raise AlphaSmsServerError(reply_msg_node.text)
+            'text': text,
+            'type': message_type,
+            'id': message_id,
+            'wap_url': wap_url
+        }])
+        our_reply = reply.pop()
+        if our_reply is None:
+            raise AlphaSmsException('No server reply')
+        if int(our_reply['error']) != 1:
+            raise AlphaSmsServerError(our_reply['error'])
+        return our_reply
 
 
 class AlphaSmsException(Exception):
