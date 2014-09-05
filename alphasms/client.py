@@ -86,12 +86,14 @@ class Client(object):
         """
         Internal function used to
         :param messages:    dictionary of messages to send, made of:
-                            'recipient',
-                            'sender',
-                            'text',
-                            'type',
-                            'id',
-                            'wap_url'
+                            {
+                                'recipient',
+                                'sender',
+                                'text',
+                                'type',
+                                'id',
+                                'wap_url'
+                            }
                             See send_sms for details about this attributes
         :return: Dict
                 {
