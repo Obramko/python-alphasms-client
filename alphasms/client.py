@@ -205,8 +205,6 @@ class MessageQueue(object):
     def flush(self):
         if len(self.queue) > 0:
             self.client.bulk_send_sms(self.queue)
-            print('Sending messages:')
-            print(self.queue)
             self.queue.clear()
 
     def add_message(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
