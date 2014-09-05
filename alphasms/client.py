@@ -125,15 +125,12 @@ class Client(object):
         xml_tree = self.__create_request('message', message_nodes)
         reply = self.__run_request(xml_tree)
         reply_msg_nodes = reply.findall('message/msg')
-        replies = []
-        for reply_msg_node in reply_msg_nodes:
-            replies.append({
-                'id': reply_msg_node.get('id'),
-                'sms_count': reply_msg_node.get('sms_count'),
-                'sms_id': reply_msg_node.get('sms_id'),
-                'error': reply_msg_node.text
-            })
-        return replies
+        return [{
+            'id': reply_msg_node.get('id'),
+            'sms_count': reply_msg_node.get('sms_count'),
+            'sms_id': reply_msg_node.get('sms_id'),
+            'error': reply_msg_node.text
+        } for reply_msg_node in reply_msg_nodes]
 
     def send_sms(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
         """
@@ -152,13 +149,13 @@ class Client(object):
         :return: Message ID
         """
         reply = self.bulk_send_sms([{
-            'recipient': recipient,
-            'sender': sender,
-            'text': text,
-            'type': message_type,
-            'id': message_id,
-            'wap_url': wap_url
-        }])
+                                        'recipient': recipient,
+                                        'sender': sender,
+                                        'text': text,
+                                        'type': message_type,
+                                        'id': message_id,
+                                        'wap_url': wap_url
+                                    }])
         our_reply = reply.pop()
         if our_reply is None:
             raise AlphaSmsException('No server reply')
