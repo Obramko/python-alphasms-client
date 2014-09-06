@@ -1,10 +1,10 @@
 from distutils.core import setup
 setup(
     name='alphasms-client',
-    version='0.1.1',
+    version='0.1.2',
     description='Ukrainian AlphaSMS service client API implementation for Python',
     url='https://github.com/Obramko/python-alphasms-client',
-    download_url='https://github.com/Obramko/python-alphasms-client/tarball/0.1.1',
+    download_url='https://github.com/Obramko/python-alphasms-client/tarball/0.1.2',
     packages=['alphasms'],
     author='Vadym Abramchuk',
     author_email='abramm@gmail.com',
