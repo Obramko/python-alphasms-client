@@ -61,7 +61,8 @@ class StatusResult(namedtuple('StatusResult', 'user_sms_id sms_count sms_id date
     }
 
     def __repr__(self):
-        return '%s: %s' % (super().__repr__(), self.status_string())
+        return 'StatusResult(user_sms_id=%r, sms_count=%r, sms_id=%r, date_completed=%r, status=%r, status_string=%r)' \
+               % (self.user_sms_id, self.sms_count, self.sms_id, self.date_completed, self.status, self.status_string())
 
     def status_string(self):
         return self.result_codes.get(int(self.status), 'Unknown error %s' % self.status)
@@ -98,7 +99,7 @@ class Client(object):
             for element in action_elements:
                 action_node.append(element)
         xml_tree = ETree.ElementTree(package_node)
-        xml_tree.write(stream, encoding='utf-8', xml_declaration=True, short_empty_elements=False)
+        xml_tree.write(stream, encoding='utf-8', xml_declaration=True)
         return stream.getvalue()
 
     @staticmethod
@@ -304,7 +305,7 @@ class MessageQueue(object):
     def flush(self):
         if len(self.queue) > 0:
             self.sent_messages += self.client.bulk_send_sms(self.queue)
-            self.queue.clear()
+            self.queue = []
 
     def add_message(self, recipient, sender, text, user_sms_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
         self.queue.append(MessageRequest(
