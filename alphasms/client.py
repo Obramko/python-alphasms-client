@@ -3,9 +3,6 @@ import xml.etree.ElementTree as ETree
 import io
 from collections import namedtuple
 
-AUTH_METHOD_API = 0
-AUTH_METHOD_LOGIN_PASSWORD = 1
-
 MESSAGE_TYPE_NORMAL = 0
 MESSAGE_TYPE_FLASH = 1
 MESSAGE_TYPE_WAP_PUSH = 2
@@ -16,12 +13,9 @@ OutgoingMessage = namedtuple('OutgoingMessage', 'recipient sender text message_t
 
 class Client(object):
     def __init__(self, login=None, password=None, api_key=None):
-        if login is not None and password is not None:
-            self.auth_method = AUTH_METHOD_LOGIN_PASSWORD
+        if api_key or (login and password):
             self.login = login
             self.password = password
-        elif api_key is not None:
-            self.auth_method = AUTH_METHOD_API
             self.api_key = api_key
         else:
             raise ValueError("AlphaSMS API client needs either API key or login/password pair")
@@ -36,9 +30,9 @@ class Client(object):
         """
         stream = io.BytesIO()
         package_node = ETree.Element("package")
-        if self.auth_method == AUTH_METHOD_API:
+        if self.api_key:
             package_node.set("key", self.api_key)
-        elif self.auth_method == AUTH_METHOD_LOGIN_PASSWORD:
+        elif self.login and self.password:
             package_node.set("login", self.login)
             package_node.set("password", self.password)
         action_node = ETree.SubElement(package_node, action)
