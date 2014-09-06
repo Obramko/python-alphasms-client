@@ -10,8 +10,12 @@ MESSAGE_TYPE_VOICE = 3
 
 OutgoingMessage = namedtuple('OutgoingMessage', 'recipient sender text message_type message_id wap_url')
 
+SendingResult = namedtuple('SendingResult', 'message_id sms_count sms_id error')
+
 
 class Client(object):
+    __message_queue = None
+
     def __init__(self, login=None, password=None, api_key=None):
         if api_key or (login and password):
             self.login = login
@@ -19,7 +23,6 @@ class Client(object):
             self.api_key = api_key
         else:
             raise ValueError("AlphaSMS API client needs either API key or login/password pair")
-        self.__message_queue = MessageQueue(self)
 
     def __create_request(self, action, action_elements=None):
         """
@@ -83,13 +86,8 @@ class Client(object):
         Internal function used to
         :param messages: list of messages to send
         :type messages: list[OutgoingMessage]
-        :return: Dict
-                {
-                    'id': message id (supplied by user),
-                    'sms_count': count of messages sent (for multipart messages),
-                    'sms_id': message id (supplied by service)
-                    'error': error code (1 for success)
-                }
+        :return: List of sending results
+        :rtype: list[SendingResult]
         :raise ValueError: For WAP Push-related errors
         """
         message_nodes = []
@@ -110,12 +108,12 @@ class Client(object):
         xml_tree = self.__create_request('message', message_nodes)
         reply = self.__run_request(xml_tree)
         reply_msg_nodes = reply.findall('message/msg')
-        return [{
-            'id': reply_msg_node.get('id'),
-            'sms_count': reply_msg_node.get('sms_count'),
-            'sms_id': reply_msg_node.get('sms_id'),
-            'error': reply_msg_node.text
-        } for reply_msg_node in reply_msg_nodes]
+        return [SendingResult(
+            message_id=reply_msg_node.get('id'),
+            sms_count=reply_msg_node.get('sms_count'),
+            sms_id=reply_msg_node.get('sms_id'),
+            error=reply_msg_node.text
+        ) for reply_msg_node in reply_msg_nodes]
 
     def send_sms(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
         """
@@ -144,8 +142,8 @@ class Client(object):
         our_reply = reply.pop()
         if our_reply is None:
             raise AlphaSmsException('No server reply')
-        if int(our_reply['error']) != 1:
-            raise AlphaSmsServerError(our_reply['error'])
+        if int(our_reply.error) != 1:
+            raise AlphaSmsServerError(our_reply.error)
         return our_reply
 
     def message_queue(self):
@@ -158,6 +156,8 @@ class Client(object):
         :return: Message queue object
         :rtype: MessageQueue
         """
+        if self.__message_queue is None:
+            self.__message_queue = MessageQueue(self)
         return self.__message_queue
 
 
