@@ -1,1 +1,2 @@
-__author__ = 'abram'
+__all__ = ['client']
+from alphasms.client import Client, MessageQueue

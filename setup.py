@@ -1,5 +1,3 @@
-__author__ = 'abram'
-
 from distutils.core import setup
 setup(
     name='alphasms',

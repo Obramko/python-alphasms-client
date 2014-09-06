@@ -1,5 +1,3 @@
-__author__ = 'abram'
-
 import requests
 import xml.etree.ElementTree as ETree
 import io
