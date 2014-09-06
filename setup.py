@@ -8,7 +8,7 @@ setup(
     author_email='abramm@gmail.com',
     maintainer='Vadym Abramchuk',
     maintainer_email='abramm@gmail.com',
-    license='LGPLv2+',
+    license='LGPLv3+',
     install_requires=[
         'requests'
     ],
