@@ -26,7 +26,44 @@ class OutgoingMessage(namedtuple('OutgoingMessage', 'recipient sender text messa
         return element
 
 
+class StatusRequest(namedtuple('StatusRequest', 'message_id sms_id')):
+    def as_xml_element(self):
+        element = ETree.Element('msg')
+        if self.message_id:
+            element.set('id', self.message_id)
+        elif self.sms_id:
+            element.set('sms_id', self.sms_id)
+        else:
+            raise ValueError('Either message_id or sms_id is required')
+        return element
+
 SendingResult = namedtuple('SendingResult', 'message_id sms_count sms_id error')
+
+
+class StatusResult(namedtuple('StatusResult', 'message_id sms_count sms_id date_completed status')):
+    result_codes = {
+        1: 'received',
+        100: 'scheduled for delivery',
+        101: 'enroute state',  # I'd want to know what this actually means
+        102: 'delivered',
+        103: 'expired',
+        104: 'deleted',
+        105: 'undeliverable',
+        106: 'accepted',
+        107: 'unknown',
+        108: 'rejected',
+        109: 'discarded',
+        110: 'sending',
+        111: 'receiver\'s operator is not supported',
+        112: 'wrong alphaname (only for Life:) Ukraine)',
+        113: 'wrong alphaname, money returned (only for Life:) Ukraine)'
+    }
+
+    def __repr__(self):
+        return '%s: %s' % (super().__repr__(), self.status_string())
+
+    def status_string(self):
+        return self.result_codes.get(int(self.status), 'Unknown error %s' % self.status)
 
 
 class Client(object):
@@ -110,6 +147,7 @@ class Client(object):
         xml_tree = self.__create_request('message', message_nodes)
         reply = self.__run_request(xml_tree)
         reply_msg_nodes = reply.findall('message/msg')
+        """:type: list[ETree.Element]"""
         return [SendingResult(
             message_id=reply_msg_node.get('id'),
             sms_count=reply_msg_node.get('sms_count'),
@@ -148,6 +186,37 @@ class Client(object):
             raise AlphaSmsServerError(our_reply.error)
         return our_reply
 
+    def bulk_get_status(self, status_requests):
+        """
+        Get statuses for list of messages
+        :param status_requests: list of messages
+        :type status_requests: list[StatusRequest]
+        :return:
+        """
+        status_nodes = [req.as_xml_element() for req in status_requests]
+        print(status_nodes)
+        xml_tree = self.__create_request('status', status_nodes)
+        reply = self.__run_request(xml_tree)
+        reply_msg_nodes = reply.findall('status/msg')
+        """:type: list[ETree.Element]"""
+        return [StatusResult(
+            message_id=reply_msg_node.get('id'),
+            sms_count=reply_msg_node.get('sms_count'),
+            sms_id=reply_msg_node.get('sms_id'),
+            date_completed=reply_msg_node.get('date_completed'),
+            status=reply_msg_node.text
+        ) for reply_msg_node in reply_msg_nodes]
+
+    def get_status(self, message_id=None, sms_id=None):
+        reply = self.bulk_get_status([StatusRequest(
+            message_id=message_id,
+            sms_id=sms_id
+        )])
+        our_reply = reply.pop()
+        if our_reply is None:
+            raise AlphaSmsException('No server reply')
+        return our_reply
+
     def message_queue(self):
         """
         Returns message queue for bulk sending. Use it like this:
@@ -183,6 +252,8 @@ class AlphaSmsServerError(Exception):
 class MessageQueue(object):
     queue = []
     """:type: list[OutgoingMessage]"""
+    sent_messages = []
+    """:type list[SendingResult]"""
 
     def __init__(self, client):
         """
@@ -201,7 +272,7 @@ class MessageQueue(object):
 
     def flush(self):
         if len(self.queue) > 0:
-            self.client.bulk_send_sms(self.queue)
+            self.sent_messages += self.client.bulk_send_sms(self.queue)
             self.queue.clear()
 
     def add_message(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
