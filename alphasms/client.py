@@ -168,7 +168,16 @@ class AlphaSmsException(Exception):
 
 
 class AlphaSmsServerError(Exception):
-    pass
+    error_codes = {
+        200: 'Unknown error',
+        201: 'Wrong document format',
+        202: 'Authorization error',
+        209: 'Wrong API key or API disabled by user',
+        210: 'Denied IP address'
+    }
+
+    def __str__(self):
+        return '%s: %s' % (self.args[0], self.error_codes.get(int(self.args[0]), 'Unknown error'))
 
 
 class MessageQueue(object):
