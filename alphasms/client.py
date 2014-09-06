@@ -8,7 +8,23 @@ MESSAGE_TYPE_FLASH = 1
 MESSAGE_TYPE_WAP_PUSH = 2
 MESSAGE_TYPE_VOICE = 3
 
-OutgoingMessage = namedtuple('OutgoingMessage', 'recipient sender text message_type message_id wap_url')
+
+class OutgoingMessage(namedtuple('OutgoingMessage', 'recipient sender text message_type message_id wap_url')):
+    def as_xml_element(self):
+        element = ETree.Element('msg', {
+            'recipient': self.recipient,
+            'sender': self.sender,
+            'type': str(self.message_type)
+        })
+        if int(self.message_type) == MESSAGE_TYPE_WAP_PUSH:
+            if self.wap_url is None:
+                raise ValueError('Valid WAP Push URL is required')
+            element.set('url', self.wap_url)
+        if self.message_id is not None:
+            element.set('id', self.message_id)
+        element.text = self.text
+        return element
+
 
 SendingResult = namedtuple('SendingResult', 'message_id sms_count sms_id error')
 
@@ -90,21 +106,7 @@ class Client(object):
         :rtype: list[SendingResult]
         :raise ValueError: For WAP Push-related errors
         """
-        message_nodes = []
-        for message in messages:
-            our_new_message_node = ETree.Element('msg', {
-                'recipient': message.recipient,
-                'sender': message.sender,
-                'type': str(message.message_type)
-            })
-            if int(message.message_type) == MESSAGE_TYPE_WAP_PUSH:
-                if message.wap_url is None:
-                    raise ValueError('Valid WAP Push URL is required')
-                our_new_message_node.set('url', message.wap_url)
-            if message.message_id is not None:
-                our_new_message_node.set('id', message.message_id)
-            our_new_message_node.text = message.text
-            message_nodes.append(our_new_message_node)
+        message_nodes = [message.as_xml_element() for message in messages]
         xml_tree = self.__create_request('message', message_nodes)
         reply = self.__run_request(xml_tree)
         reply_msg_nodes = reply.findall('message/msg')
