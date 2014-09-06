@@ -9,7 +9,7 @@ MESSAGE_TYPE_WAP_PUSH = 2
 MESSAGE_TYPE_VOICE = 3
 
 
-class MessageRequest(namedtuple('MessageRequest', 'recipient sender text message_type message_id wap_url')):
+class MessageRequest(namedtuple('MessageRequest', 'recipient sender text message_type user_sms_id wap_url')):
     def as_xml_element(self):
         element = ETree.Element('msg', {
             'recipient': self.recipient,
@@ -20,28 +20,28 @@ class MessageRequest(namedtuple('MessageRequest', 'recipient sender text message
             if self.wap_url is None:
                 raise ValueError('Valid WAP Push URL is required')
             element.set('url', self.wap_url)
-        if self.message_id is not None:
-            element.set('id', self.message_id)
+        if self.user_sms_id is not None:
+            element.set('id', str(self.user_sms_id))
         element.text = self.text
         return element
 
 
-MessageResult = namedtuple('MessageResult', 'message_id sms_count sms_id error')
+MessageResult = namedtuple('MessageResult', 'user_sms_id sms_count sms_id error')
 
 
-class StatusRequest(namedtuple('StatusRequest', 'message_id sms_id')):
+class StatusRequest(namedtuple('StatusRequest', 'user_sms_id sms_id')):
     def as_xml_element(self):
         element = ETree.Element('msg')
-        if self.message_id:
-            element.set('id', self.message_id)
+        if self.user_sms_id:
+            element.set('id', str(self.user_sms_id))
         elif self.sms_id:
-            element.set('sms_id', self.sms_id)
+            element.set('sms_id', str(self.sms_id))
         else:
-            raise ValueError('Either message_id or sms_id is required')
+            raise ValueError('Either user_sms_id or sms_id is required')
         return element
 
 
-class StatusResult(namedtuple('StatusResult', 'message_id sms_count sms_id date_completed status')):
+class StatusResult(namedtuple('StatusResult', 'user_sms_id sms_count sms_id date_completed status')):
     result_codes = {
         1: 'received',
         100: 'scheduled for delivery',
@@ -150,20 +150,20 @@ class Client(object):
         reply_msg_nodes = reply.findall('message/msg')
         """:type: list[ETree.Element]"""
         return [MessageResult(
-            message_id=reply_msg_node.get('id'),
+            user_sms_id=reply_msg_node.get('id'),
             sms_count=reply_msg_node.get('sms_count'),
             sms_id=reply_msg_node.get('sms_id'),
             error=reply_msg_node.text
         ) for reply_msg_node in reply_msg_nodes]
 
-    def send_sms(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
+    def send_sms(self, recipient, sender, text, user_sms_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
         """
         Sends SMS
 
         :param recipient: Recipient phone number. May be in Ukrainian or international format
         :param sender: Sender name, e.g. your phone number or registered alphanumeric name
         :param text: Message text
-        :param message_id: User-defined message ID. MUST be unique if defined
+        :param user_sms_id: User-defined message ID. MUST be unique if defined
         :param message_type: Message type.
                              May be one of MESSAGE_TYPE_NORMAL, MESSAGE_TYPE_FLASH, MESSAGE_MESSAGE_TYPE_WAP_PUSH or
                              MESSAGE_TYPE_VOICE.
@@ -177,7 +177,7 @@ class Client(object):
             sender=sender,
             text=text,
             message_type=message_type,
-            message_id=message_id,
+            user_sms_id=user_sms_id,
             wap_url=wap_url
         )])
         our_reply = reply.pop()
@@ -195,22 +195,51 @@ class Client(object):
         :return:
         """
         status_nodes = [req.as_xml_element() for req in status_requests]
-        print(status_nodes)
         xml_tree = self.__create_request('status', status_nodes)
         reply = self.__run_request(xml_tree)
         reply_msg_nodes = reply.findall('status/msg')
         """:type: list[ETree.Element]"""
         return [StatusResult(
-            message_id=reply_msg_node.get('id'),
+            user_sms_id=reply_msg_node.get('id'),
             sms_count=reply_msg_node.get('sms_count'),
             sms_id=reply_msg_node.get('sms_id'),
             date_completed=reply_msg_node.get('date_completed'),
             status=reply_msg_node.text
         ) for reply_msg_node in reply_msg_nodes]
 
-    def get_status(self, message_id=None, sms_id=None):
+    def get_status(self, user_sms_id=None, sms_id=None):
         reply = self.bulk_get_status([StatusRequest(
-            message_id=message_id,
+            user_sms_id=user_sms_id,
+            sms_id=sms_id
+        )])
+        our_reply = reply.pop()
+        if our_reply is None:
+            raise AlphaSmsException('No server reply')
+        return our_reply
+
+    def bulk_delete(self, delete_requests):
+        """
+        Delete list of messages
+        :param delete_requests: list of messages
+        :type delete_requests: list[StatusRequest]
+        :return:
+        """
+        delete_nodes = [req.as_xml_element() for req in delete_requests]
+        xml_tree = self.__create_request('delete', delete_nodes)
+        reply = self.__run_request(xml_tree)
+        reply_msg_nodes = reply.findall('status/msg')
+        """:type: list[ETree.Element]"""
+        return [StatusResult(
+            user_sms_id=reply_msg_node.get('id'),
+            sms_count=reply_msg_node.get('sms_count'),
+            sms_id=reply_msg_node.get('sms_id'),
+            date_completed=reply_msg_node.get('date_completed'),
+            status=reply_msg_node.text
+        ) for reply_msg_node in reply_msg_nodes]
+
+    def delete(self, user_sms_id=None, sms_id=None):
+        reply = self.bulk_delete([StatusRequest(
+            user_sms_id=user_sms_id,
             sms_id=sms_id
         )])
         our_reply = reply.pop()
@@ -242,6 +271,7 @@ class AlphaSmsServerError(Exception):
         200: 'Unknown error',
         201: 'Wrong document format',
         202: 'Authorization error',
+        208: 'Duplicate id (user_sms_id)',
         209: 'Wrong API key or API disabled by user',
         210: 'Denied IP address'
     }
@@ -276,13 +306,13 @@ class MessageQueue(object):
             self.sent_messages += self.client.bulk_send_sms(self.queue)
             self.queue.clear()
 
-    def add_message(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
+    def add_message(self, recipient, sender, text, user_sms_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
         self.queue.append(MessageRequest(
             recipient=recipient,
             sender=sender,
             text=text,
             message_type=message_type,
-            message_id=message_id,
+            user_sms_id=user_sms_id,
             wap_url=wap_url
         ))
         if len(self.queue) >= 50:
