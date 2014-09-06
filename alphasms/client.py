@@ -9,7 +9,7 @@ MESSAGE_TYPE_WAP_PUSH = 2
 MESSAGE_TYPE_VOICE = 3
 
 
-class OutgoingMessage(namedtuple('OutgoingMessage', 'recipient sender text message_type message_id wap_url')):
+class MessageRequest(namedtuple('MessageRequest', 'recipient sender text message_type message_id wap_url')):
     def as_xml_element(self):
         element = ETree.Element('msg', {
             'recipient': self.recipient,
@@ -26,6 +26,9 @@ class OutgoingMessage(namedtuple('OutgoingMessage', 'recipient sender text messa
         return element
 
 
+MessageResult = namedtuple('MessageResult', 'message_id sms_count sms_id error')
+
+
 class StatusRequest(namedtuple('StatusRequest', 'message_id sms_id')):
     def as_xml_element(self):
         element = ETree.Element('msg')
@@ -36,8 +39,6 @@ class StatusRequest(namedtuple('StatusRequest', 'message_id sms_id')):
         else:
             raise ValueError('Either message_id or sms_id is required')
         return element
-
-SendingResult = namedtuple('SendingResult', 'message_id sms_count sms_id error')
 
 
 class StatusResult(namedtuple('StatusResult', 'message_id sms_count sms_id date_completed status')):
@@ -138,7 +139,7 @@ class Client(object):
         """
         Internal function used to
         :param messages: list of messages to send
-        :type messages: list[OutgoingMessage]
+        :type messages: list[MessageRequest]
         :return: List of sending results
         :rtype: list[SendingResult]
         :raise ValueError: For WAP Push-related errors
@@ -148,7 +149,7 @@ class Client(object):
         reply = self.__run_request(xml_tree)
         reply_msg_nodes = reply.findall('message/msg')
         """:type: list[ETree.Element]"""
-        return [SendingResult(
+        return [MessageResult(
             message_id=reply_msg_node.get('id'),
             sms_count=reply_msg_node.get('sms_count'),
             sms_id=reply_msg_node.get('sms_id'),
@@ -171,7 +172,7 @@ class Client(object):
         :param wap_url: WAP Push URL
         :return: Message ID
         """
-        reply = self.bulk_send_sms([OutgoingMessage(
+        reply = self.bulk_send_sms([MessageRequest(
             recipient=recipient,
             sender=sender,
             text=text,
@@ -251,9 +252,9 @@ class AlphaSmsServerError(Exception):
 
 class MessageQueue(object):
     queue = []
-    """:type: list[OutgoingMessage]"""
+    """:type: list[MessageRequest]"""
     sent_messages = []
-    """:type list[SendingResult]"""
+    """:type list[MessageResult]"""
 
     def __init__(self, client):
         """
@@ -276,7 +277,7 @@ class MessageQueue(object):
             self.queue.clear()
 
     def add_message(self, recipient, sender, text, message_id=None, message_type=MESSAGE_TYPE_NORMAL, wap_url=None):
-        self.queue.append(OutgoingMessage(
+        self.queue.append(MessageRequest(
             recipient=recipient,
             sender=sender,
             text=text,
