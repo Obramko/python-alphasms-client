@@ -22,7 +22,7 @@ Messages may be queued for delivery (this will make things faster):
 
 ```python
 with a.message_queue() as q:
-    q.add_message('0681234567', 'UAinet', 'Queued messaging TEST')
-    q.add_message('0667654321', 'UAinet', 'Queued messaging TEST 2')
+    q.add_message('0681234567', 'MyCompany', 'Queued messaging TEST')
+    q.add_message('0667654321', 'MyCompany', 'Queued messaging TEST 2')
 ```
 
